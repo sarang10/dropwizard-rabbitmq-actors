@@ -19,6 +19,7 @@ package io.appform.dropwizard.actors.actor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.AMQP;
 import io.appform.dropwizard.actors.ConnectionRegistry;
+import io.appform.dropwizard.actors.MultiTenantedConnectionRegistry;
 import io.appform.dropwizard.actors.base.UnmanagedConsumer;
 import io.appform.dropwizard.actors.base.UnmanagedPublisher;
 import io.appform.dropwizard.actors.connectivity.RMQConnection;
@@ -100,6 +101,25 @@ public abstract class BaseActor<Message> implements Managed {
                 this::handle,
                 this::handleExpiredMessages,
                 this::isExceptionIgnorable);
+    }
+
+    protected BaseActor(
+        String name,
+        ActorConfig config,
+        MultiTenantedConnectionRegistry connectionRegistry,
+        ObjectMapper mapper,
+        RetryStrategyFactory retryStrategyFactory,
+        ExceptionHandlingFactory exceptionHandlingFactory,
+        Class<? extends Message> clazz,
+        Set<Class<?>> droppedExceptionTypes, String tenantId) {
+        this.droppedExceptionTypes
+            = null == droppedExceptionTypes
+            ? Collections.emptySet() : droppedExceptionTypes;
+        actorImpl = new UnmanagedBaseActor<>(name, config, connectionRegistry, mapper, retryStrategyFactory,
+            exceptionHandlingFactory, clazz,
+            this::handle,
+            this::handleExpiredMessages,
+            this::isExceptionIgnorable, tenantId);
     }
 
     /*

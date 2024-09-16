@@ -33,6 +33,7 @@ import io.appform.dropwizard.actors.actor.ActorConfig;
 import io.appform.dropwizard.actors.actor.QueueTypeVisitorImpl;
 import io.appform.dropwizard.actors.base.utils.NamingUtils;
 import io.appform.dropwizard.actors.config.RMQConfig;
+import io.appform.dropwizard.actors.healthcheck.ConnectionHealthCheck;
 import io.appform.dropwizard.actors.observers.RMQObserver;
 import io.dropwizard.lifecycle.Managed;
 import io.dropwizard.setup.Environment;
@@ -136,7 +137,8 @@ public class RMQConnection implements Managed {
             }
         });
         channel = connection.createChannel();
-        environment.healthChecks().register(String.format("rmqconnection-%s-%s", connection, UUID.randomUUID()), healthcheck());
+        environment.healthChecks().register(String.format("rmqconnection-%s-%s", connection, UUID.randomUUID()),
+            new ConnectionHealthCheck(connection, channel));
         log.info(String.format("Started RMQ connection [%s] ", name));
     }
 
@@ -186,31 +188,6 @@ public class RMQConnection implements Managed {
         builder.putAll(actorConfig.getQueueType()
                 .handleConfig(new QueueTypeVisitorImpl(actorConfig)));
         return builder.build();
-    }
-
-    public HealthCheck healthcheck() {
-        return new HealthCheck() {
-            @Override
-            protected Result check() {
-                if (connection == null) {
-                    log.warn("RMQ Healthcheck::No RMQ connection available");
-                    return Result.unhealthy("No RMQ connection available");
-                }
-                if (!connection.isOpen()) {
-                    log.warn("RMQ Healthcheck::RMQ connection is not open");
-                    return Result.unhealthy("RMQ connection is not open");
-                }
-                if (null == channel) {
-                    log.warn("RMQ Healthcheck::Producer channel is down");
-                    return Result.unhealthy("Producer channel is down");
-                }
-                if (!channel.isOpen()) {
-                    log.warn("RMQ Healthcheck::Producer channel is closed");
-                    return Result.unhealthy("Producer channel is closed");
-                }
-                return Result.healthy();
-            }
-        };
     }
 
     @Override

@@ -19,8 +19,10 @@ package io.appform.dropwizard.actors.actor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.AMQP;
 import io.appform.dropwizard.actors.ConnectionRegistry;
+import io.appform.dropwizard.actors.MultiTenantedConnectionRegistry;
 import io.appform.dropwizard.actors.base.UnmanagedConsumer;
 import io.appform.dropwizard.actors.base.UnmanagedPublisher;
+import io.appform.dropwizard.actors.base.utils.NamingUtils;
 import io.appform.dropwizard.actors.common.Constants;
 import io.appform.dropwizard.actors.connectivity.RMQConnection;
 import io.appform.dropwizard.actors.connectivity.strategy.ConnectionIsolationStrategy;
@@ -94,6 +96,27 @@ public class UnmanagedBaseActor<Message> {
         this.consumeActor = new UnmanagedConsumer<>(
                 name, config, consumerConnection, mapper, retryStrategyFactory, exceptionHandlingFactory, clazz,
                 handlerFunction, expiredMessageHandlingFunction, errorCheckFunction);
+    }
+
+    public UnmanagedBaseActor(
+        String name,
+        ActorConfig config,
+        MultiTenantedConnectionRegistry connectionRegistry,
+        ObjectMapper mapper,
+        RetryStrategyFactory retryStrategyFactory,
+        ExceptionHandlingFactory exceptionHandlingFactory,
+        Class<? extends Message> clazz,
+        MessageHandlingFunction<Message, Boolean> handlerFunction,
+        MessageHandlingFunction<Message, Boolean> expiredMessageHandlingFunction,
+        Function<Throwable, Boolean> errorCheckFunction, String tenantId) {
+        val consumerConnection = connectionRegistry.createOrGet(tenantId,
+            consumerConnectionName(config.getConsumer()));
+        val producerConnection = connectionRegistry.createOrGet(tenantId,
+            producerConnectionName(config.getProducer()));
+        this.publishActor = new UnmanagedPublisher<>(NamingUtils.getTenantedName(tenantId, name), config, producerConnection, mapper);
+        this.consumeActor = new UnmanagedConsumer<>(
+            NamingUtils.getTenantedName(tenantId, name), config, consumerConnection, mapper, retryStrategyFactory, exceptionHandlingFactory, clazz,
+            handlerFunction, expiredMessageHandlingFunction, errorCheckFunction);
     }
 
     public void start() throws Exception {

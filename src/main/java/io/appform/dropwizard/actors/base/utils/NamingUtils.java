@@ -13,6 +13,10 @@ public class NamingUtils {
         return prefixWithNamespace(nameWithPrefix);
     }
 
+    public String getTenantedName(String tenantId, String name) {
+        return String.format("%s.%s", tenantId, name);
+    }
+
     public String sanitizeMetricName(String metric) {
         return metric == null ? null : metric.replaceAll("[^A-Za-z\\-0-9]", "").toLowerCase();
     }
