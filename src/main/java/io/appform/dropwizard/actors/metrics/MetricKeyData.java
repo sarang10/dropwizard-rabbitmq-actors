@@ -9,4 +9,5 @@ public class MetricKeyData {
     String queueName;
     String operation;
     boolean redelivered;
+    String tenantId;
 }

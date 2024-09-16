@@ -4,10 +4,8 @@ import static io.appform.dropwizard.actors.utils.CommonUtils.UNKNOWN_TENANT;
 
 import com.google.common.base.Preconditions;
 import com.rabbitmq.client.Channel;
-import io.appform.dropwizard.actors.common.Constants;
 import io.appform.dropwizard.actors.common.RabbitmqActorException;
 import io.appform.dropwizard.actors.config.RMQConfig;
-import io.appform.dropwizard.actors.connectivity.ConnectionConfig;
 import io.appform.dropwizard.actors.connectivity.RMQConnection;
 import io.appform.dropwizard.actors.healthcheck.ClusterAwareHealthCheck;
 import io.appform.dropwizard.actors.healthcheck.ConnectionHealthCheck;
@@ -16,7 +14,6 @@ import io.appform.dropwizard.actors.utils.CommonUtils;
 import io.dropwizard.lifecycle.Managed;
 import io.dropwizard.setup.Environment;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import lombok.Data;

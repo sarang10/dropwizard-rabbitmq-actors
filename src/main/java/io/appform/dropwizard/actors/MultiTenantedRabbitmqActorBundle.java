@@ -31,7 +31,7 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
   @Getter
   private MultiTenantedConnectionRegistry connectionRegistry;
   private Map<String, String> tenantToClusterMapping;
-  private final Map<String, List<RMQObserver>> multiTenantedObservers = new ConcurrentHashMap<>(); // TODO: Will normal HashMap work ?
+  private final Map<String, List<RMQObserver>> multiTenantedObservers = new ConcurrentHashMap<>();
   private final Map<String, RMQObserver> multiTenantedRootObserver = new HashMap<>();
 
   protected MultiTenantedRabbitmqActorBundle() {}
@@ -62,7 +62,7 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
         multiTenantedRootObserver.put(tenantId, setupObservers(
             environment.metrics(),
             multiTenantedObservers.computeIfAbsent(tenantId, k -> new ArrayList<>()),
-            multiClusterRmqConfig.get(tenantToClusterMapping.get(tenantId)))));
+            multiClusterRmqConfig.get(tenantToClusterMapping.get(tenantId)), tenantId)));
 
     ClusterAwareHealthCheck clusterAwareHealthCheck = new ClusterAwareHealthCheck();
     this.connectionRegistry = new MultiTenantedConnectionRegistry(environment,
@@ -86,7 +86,7 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
   }
 
   private RMQObserver setupObservers(final MetricRegistry metricRegistry,
-      List<RMQObserver> observerList, RMQConfig rmqConfig) {
+      List<RMQObserver> observerList, RMQConfig rmqConfig, String tenantId) {
     //Terminal observer calls the actual method
     RMQObserver rootObserver = new TerminalRMQObserver();
     for (var observer : observerList) {
@@ -95,7 +95,7 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
       }
     }
 
-    rootObserver = new RMQMetricObserver(rmqConfig, metricRegistry).setNext(rootObserver);
+    rootObserver = new RMQMetricObserver(rmqConfig, metricRegistry, true, tenantId).setNext(rootObserver);
     log.info("Root observer is {}", rootObserver.getClass().getSimpleName());
     return rootObserver;
   }

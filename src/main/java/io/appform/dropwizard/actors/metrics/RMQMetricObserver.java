@@ -25,6 +25,8 @@ public class RMQMetricObserver extends RMQObserver {
     private static final String CONSUME = "consume";
     private final RMQConfig rmqConfig;
     private final MetricRegistry metricRegistry;
+    private final boolean tenanted;
+    private String tenantId = "";
 
     @Getter
     private final Map<MetricKeyData, MetricData> metricCache = new ConcurrentHashMap<>();
@@ -34,6 +36,16 @@ public class RMQMetricObserver extends RMQObserver {
         super(null);
         this.rmqConfig = rmqConfig;
         this.metricRegistry = metricRegistry;
+        this.tenanted = false;
+    }
+
+    public RMQMetricObserver(final RMQConfig rmqConfig,
+        final MetricRegistry metricRegistry, boolean tenanted, String tenantId) {
+        super(null);
+        this.rmqConfig = rmqConfig;
+        this.metricRegistry = metricRegistry;
+        this.tenanted = tenanted;
+        this.tenantId = tenantId;
     }
 
     @Override
@@ -41,7 +53,10 @@ public class RMQMetricObserver extends RMQObserver {
         if (!MetricUtil.isMetricApplicable(rmqConfig.getMetricConfig(), context.getQueueName())) {
             return proceedPublish(context, supplier);
         }
-        val metricData = getMetricData(context);
+        MetricData metricData;
+        if(!tenanted)
+            metricData = getMetricData(context);
+        else metricData = getMetricData(context, tenantId);
         metricData.getTotal().mark();
         val timer = metricData.getTimer().time();
         try {
@@ -62,8 +77,15 @@ public class RMQMetricObserver extends RMQObserver {
             return proceedConsume(context, supplier);
         }
         val isRedelivered = context.isRedelivered();
-        val metricData = getMetricData(context);
-        val metricDataForRedelivery = isRedelivered ? getMetricDataForRedelivery(context) : null;
+        MetricData metricData, metricDataForRedelivery;
+        if(!tenanted) {
+            metricData = getMetricData(context);
+            metricDataForRedelivery = isRedelivered ? getMetricDataForRedelivery(context) : null;
+        } else {
+            metricData = getMetricData(context, tenantId);
+            metricDataForRedelivery = isRedelivered ? getMetricDataForRedelivery(context, tenantId) : null;
+        }
+
         metricData.getTotal().mark();
         if (metricDataForRedelivery != null) {
             metricDataForRedelivery.getTotal().mark();
@@ -92,31 +114,55 @@ public class RMQMetricObserver extends RMQObserver {
     }
 
     private MetricData getMetricData(final PublishObserverContext context) {
-        val metricKeyData = MetricKeyData.builder()
-                .queueName(context.getQueueName())
-                .operation(PUBLISH)
-                .build();
-        return metricCache.computeIfAbsent(metricKeyData, key ->
-                getMetricData(MetricUtil.getMetricPrefix(metricKeyData)));
+        return getMetricData(MetricKeyData.builder()
+            .queueName(context.getQueueName())
+            .operation(PUBLISH)
+            .build());
+    }
+
+    private MetricData getMetricData(final PublishObserverContext context, final String tenantId) {
+        return getMetricData(MetricKeyData.builder()
+            .queueName(context.getQueueName())
+            .operation(PUBLISH)
+            .tenantId(tenantId)
+            .build());
     }
 
     private MetricData getMetricData(final ConsumeObserverContext context) {
-        val metricKeyData = MetricKeyData.builder()
+        return getMetricData(MetricKeyData.builder()
                 .queueName(context.getQueueName())
                 .operation(CONSUME)
-                .build();
-        return metricCache.computeIfAbsent(metricKeyData, key ->
-                getMetricData(MetricUtil.getMetricPrefix(metricKeyData)));
+                .build());
+    }
+
+    private MetricData getMetricData(final ConsumeObserverContext context, final String tenantId) {
+        return getMetricData(MetricKeyData.builder()
+            .queueName(context.getQueueName())
+            .operation(CONSUME)
+            .tenantId(tenantId)
+            .build());
     }
 
     private MetricData getMetricDataForRedelivery(final ConsumeObserverContext context) {
-        val metricKeyData = MetricKeyData.builder()
+        return getMetricData(MetricKeyData.builder()
                 .queueName(context.getQueueName())
                 .operation(CONSUME)
                 .redelivered(context.isRedelivered())
-                .build();
+                .build());
+    }
+
+    private MetricData getMetricDataForRedelivery(final ConsumeObserverContext context, final String tenantId) {
+        return getMetricData(MetricKeyData.builder()
+            .queueName(context.getQueueName())
+            .operation(CONSUME)
+            .redelivered(context.isRedelivered())
+            .tenantId(tenantId)
+            .build());
+    }
+
+    private MetricData getMetricData(MetricKeyData metricKeyData) {
         return metricCache.computeIfAbsent(metricKeyData, key ->
-                getMetricData(MetricUtil.getMetricPrefixForRedelivery(metricKeyData)));
+            getMetricData(MetricUtil.getMetricPrefixForRedelivery(metricKeyData)));
     }
 
     private MetricData getMetricData(final String metricPrefix) {
