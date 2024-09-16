@@ -17,6 +17,10 @@
 package io.appform.dropwizard.actors.utils;
 
 import com.google.common.base.Strings;
+import io.appform.dropwizard.actors.common.Constants;
+import io.appform.dropwizard.actors.config.RMQConfig;
+import io.appform.dropwizard.actors.connectivity.ConnectionConfig;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -26,6 +30,8 @@ import java.util.Set;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class CommonUtils {
+
+    public static final String UNKNOWN_TENANT = "Unknown tenant: ";
 
     public static boolean isEmpty(Collection<?> collection) {
         return null == collection || collection.isEmpty();
@@ -43,5 +49,21 @@ public class CommonUtils {
         return CommonUtils.isEmpty(retriableExceptions)
                 || (null != exception
                 && retriableExceptions.contains(exception.getClass().getSimpleName()));
+    }
+
+    public static int determineThreadPoolSize(String connectionName, RMQConfig rmqConfig) {
+        if (Constants.DEFAULT_CONNECTIONS.contains(connectionName)) {
+            return rmqConfig.getThreadPoolSize();
+        }
+
+        if (rmqConfig.getConnections() == null) {
+            return Constants.DEFAULT_THREADS_PER_CONNECTION;
+        }
+
+        return rmqConfig.getConnections().stream()
+            .filter(x -> Objects.equals(x.getName(), connectionName))
+            .findAny()
+            .map(ConnectionConfig::getThreadPoolSize)
+            .orElse(Constants.DEFAULT_THREADS_PER_CONNECTION);
     }
 }

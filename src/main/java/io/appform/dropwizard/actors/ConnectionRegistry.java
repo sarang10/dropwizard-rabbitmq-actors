@@ -1,13 +1,10 @@
 package io.appform.dropwizard.actors;
 
-import com.google.common.base.Joiner;
-import io.appform.dropwizard.actors.common.Constants;
-import io.appform.dropwizard.actors.common.ErrorCode;
 import io.appform.dropwizard.actors.common.RabbitmqActorException;
 import io.appform.dropwizard.actors.config.RMQConfig;
-import io.appform.dropwizard.actors.connectivity.ConnectionConfig;
 import io.appform.dropwizard.actors.connectivity.RMQConnection;
 import io.appform.dropwizard.actors.observers.RMQObserver;
+import io.appform.dropwizard.actors.utils.CommonUtils;
 import io.dropwizard.lifecycle.Managed;
 import io.dropwizard.setup.Environment;
 import lombok.Data;
@@ -15,7 +12,6 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
@@ -44,7 +40,7 @@ public class ConnectionRegistry implements Managed {
     }
 
     public RMQConnection createOrGet(String connectionName) {
-        val threadPoolSize = determineThreadPoolSize(connectionName);
+        val threadPoolSize = CommonUtils.determineThreadPoolSize(connectionName, this.rmqConfig);
         return createOrGet(connectionName, threadPoolSize);
     }
 
@@ -67,22 +63,6 @@ public class ConnectionRegistry implements Managed {
             log.info(String.format("Created new RMQ connection with name [%s]", connection));
             return rmqConnection;
         });
-    }
-
-    private int determineThreadPoolSize(String connectionName) {
-        if (Constants.DEFAULT_CONNECTIONS.contains(connectionName)) {
-            return rmqConfig.getThreadPoolSize();
-        }
-
-        if (rmqConfig.getConnections() == null) {
-            return Constants.DEFAULT_THREADS_PER_CONNECTION;
-        }
-
-        return rmqConfig.getConnections().stream()
-                .filter(x -> Objects.equals(x.getName(), connectionName))
-                .findAny()
-                .map(ConnectionConfig::getThreadPoolSize)
-                .orElse(Constants.DEFAULT_THREADS_PER_CONNECTION);
     }
 
     @Override

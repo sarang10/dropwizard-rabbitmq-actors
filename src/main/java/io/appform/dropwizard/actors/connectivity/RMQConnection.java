@@ -17,7 +17,6 @@
 
 package io.appform.dropwizard.actors.connectivity;
 
-import com.codahale.metrics.health.HealthCheck;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;

@@ -4,16 +4,15 @@ import com.codahale.metrics.health.HealthCheck;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class TenantAwareHealthCheck extends HealthCheck {
+public class ClusterAwareHealthCheck extends HealthCheck {
 
   private final Map<String, List<HealthCheck>> healthCheckMap = new ConcurrentHashMap<>();
 
-  public void addHealthCheckForTenant(String tenantId, HealthCheck healthCheck) {
-    Objects.requireNonNull(healthCheckMap.putIfAbsent(tenantId, new ArrayList<>())).add(healthCheck);
+  public void addHealthCheckForCluster(String clusterId, HealthCheck healthCheck) {
+    healthCheckMap.computeIfAbsent(clusterId, k -> new ArrayList<>()).add(healthCheck);
   }
 
   @Override
@@ -29,6 +28,6 @@ public class TenantAwareHealthCheck extends HealthCheck {
       if(healthy.get())
         return Result.healthy();
     }
-    return Result.unhealthy("All connections for all tenants are unhealthy!");
+    return Result.unhealthy("All connections for all clusters are unhealthy!");
   }
 }
