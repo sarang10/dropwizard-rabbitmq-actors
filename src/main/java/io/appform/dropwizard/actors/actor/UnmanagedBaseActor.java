@@ -113,9 +113,8 @@ public class UnmanagedBaseActor<Message> {
             consumerConnectionName(config.getConsumer()));
         val producerConnection = connectionRegistry.createOrGet(tenantId,
             producerConnectionName(config.getProducer()));
-        this.publishActor = new UnmanagedPublisher<>(NamingUtils.getTenantedName(tenantId, name), config, producerConnection, mapper);
-        this.consumeActor = new UnmanagedConsumer<>(
-            NamingUtils.getTenantedName(tenantId, name), config, consumerConnection, mapper, retryStrategyFactory, exceptionHandlingFactory, clazz,
+        this.publishActor = new UnmanagedPublisher<>(name, config, producerConnection, mapper);
+        this.consumeActor = new UnmanagedConsumer<>(name, config, consumerConnection, mapper, retryStrategyFactory, exceptionHandlingFactory, clazz,
             handlerFunction, expiredMessageHandlingFunction, errorCheckFunction);
     }
 

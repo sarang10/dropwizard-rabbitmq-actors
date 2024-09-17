@@ -30,9 +30,9 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
 
   @Getter
   private MultiTenantedConnectionRegistry connectionRegistry;
-  private Map<String, String> tenantToClusterMapping;
   private final Map<String, List<RMQObserver>> multiTenantedObservers = new ConcurrentHashMap<>();
   private final Map<String, RMQObserver> multiTenantedRootObserver = new HashMap<>();
+  private Map<String, RMQConfig> multiClusterRmqConfig;
 
   protected MultiTenantedRabbitmqActorBundle() {}
 
@@ -40,8 +40,7 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
   public void initialize(Bootstrap<?> bootstrap) {}
 
   protected abstract Map<String, TtlConfig> getMultiTenantedTtlConfig(T t);
-  protected abstract Map<String, String> getTenantToClusterMapping(T t);
-  protected abstract Map<String, RMQConfig> getMultiClusterRmqConfig(T t);
+  protected abstract Map<String, RMQConfig> getMultiTenantRmqConfig(T t);
 
   protected ExecutorServiceProvider getExecutorServiceProvider(T t) {
     return (name, coreSize) -> Executors.newFixedThreadPool(coreSize);
@@ -49,8 +48,7 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
 
   @Override
   public void run(T t, Environment environment) {
-    Map<String, RMQConfig> multiClusterRmqConfig = getMultiClusterRmqConfig(t);
-    this.tenantToClusterMapping = getTenantToClusterMapping(t);
+    multiClusterRmqConfig = getMultiTenantRmqConfig(t);
     val executorServiceProvider = getExecutorServiceProvider(t);
     Preconditions.checkNotNull(executorServiceProvider, "Null executor service provider provided");
 
@@ -58,17 +56,14 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
         new HashMap<String, TtlConfig>() : getMultiTenantedTtlConfig(t);
 
     //TODO : Exception Handling ? Preconditions.checkNotNull(rootObserver, "Null root observer provided");
-    tenantToClusterMapping.forEach((tenantId, clusterId) ->
+    multiClusterRmqConfig.forEach((tenantId, rmqConfig) ->
         multiTenantedRootObserver.put(tenantId, setupObservers(
-            environment.metrics(),
-            multiTenantedObservers.computeIfAbsent(tenantId, k -> new ArrayList<>()),
-            multiClusterRmqConfig.get(tenantToClusterMapping.get(tenantId)), tenantId)));
+            environment.metrics(), multiTenantedObservers.computeIfAbsent(tenantId, k -> new ArrayList<>()),
+            rmqConfig, tenantId)));
 
     ClusterAwareHealthCheck clusterAwareHealthCheck = new ClusterAwareHealthCheck();
-    this.connectionRegistry = new MultiTenantedConnectionRegistry(environment,
-        executorServiceProvider,
-        multiClusterRmqConfig, ttlConfig, tenantToClusterMapping, multiTenantedRootObserver,
-        clusterAwareHealthCheck);
+    this.connectionRegistry = new MultiTenantedConnectionRegistry(environment, executorServiceProvider,
+        multiClusterRmqConfig, ttlConfig, multiTenantedRootObserver, clusterAwareHealthCheck);
     environment.lifecycle().manage(connectionRegistry);
 
     environment.healthChecks().addListener(new ConnectionHealthCheckListener(environment));
@@ -80,7 +75,7 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
       return;
     }
     Preconditions.checkArgument(
-        tenantToClusterMapping.containsKey(tenantId), UNKNOWN_TENANT + tenantId);
+        multiClusterRmqConfig.containsKey(tenantId), UNKNOWN_TENANT + tenantId);
     this.multiTenantedObservers.computeIfAbsent(tenantId, k -> new ArrayList<>()).add(observer);
     log.info("Registered observer: " + observer.getClass().getSimpleName() + " for tenant id: " + tenantId);
   }

@@ -31,7 +31,6 @@ public class MultiTenantedConnectionRegistry implements Managed {
   private final Environment environment;
   private final ExecutorServiceProvider executorServiceProvider;
   private final Map<String, RMQConfig> multiClusterRmqConfig;
-  private final Map<String, String> tenantToClusterMapping;
   private final Map<String, TtlConfig> multiTenantedTtlConfig;
   private final Map<String, RMQObserver> multiTenantedRootObserver;
   private final ClusterAwareHealthCheck clusterAwareHealthCheck;
@@ -40,7 +39,6 @@ public class MultiTenantedConnectionRegistry implements Managed {
       final ExecutorServiceProvider executorServiceProvider,
       final Map<String, RMQConfig> multiClusterRmqConfig,
       final Map<String, TtlConfig> multiTenantedTtlConfig,
-      final Map<String, String> tenantToClusterMapping,
       final Map<String, RMQObserver> multiTenantedRootObserver,
       final ClusterAwareHealthCheck clusterAwareHealthCheck) {
     this.environment = environment;
@@ -48,14 +46,13 @@ public class MultiTenantedConnectionRegistry implements Managed {
     this.multiClusterRmqConfig = multiClusterRmqConfig;
     this.multiTenantedTtlConfig = multiTenantedTtlConfig;
     this.connections = new ConcurrentHashMap<>();
-    this.tenantToClusterMapping = tenantToClusterMapping;
     this.multiTenantedRootObserver = multiTenantedRootObserver;
     this.clusterAwareHealthCheck = clusterAwareHealthCheck;
   }
 
   public RMQConnection createOrGet(String tenantId, String connectionName) {
     Preconditions.checkArgument(
-        tenantToClusterMapping.containsKey(tenantId), UNKNOWN_TENANT + tenantId);
+        multiClusterRmqConfig.containsKey(tenantId), UNKNOWN_TENANT + tenantId);
     val threadPoolSize = determineThreadPoolSize(tenantId, connectionName);
     return createOrGet(tenantId, connectionName, threadPoolSize);
   }
@@ -63,23 +60,22 @@ public class MultiTenantedConnectionRegistry implements Managed {
   public RMQConnection createOrGet(String tenantId, String connectionName, int threadPoolSize) {
 
     Preconditions.checkArgument(
-        tenantToClusterMapping.containsKey(tenantId) && multiTenantedRootObserver.containsKey(tenantId)
+        multiClusterRmqConfig.containsKey(tenantId) && multiTenantedRootObserver.containsKey(tenantId)
         , UNKNOWN_TENANT + tenantId);
 
-    String clusterId = tenantToClusterMapping.get(tenantId);
-    return connections.computeIfAbsent(clusterId, k -> new ConcurrentHashMap<>())
+    return connections.computeIfAbsent(tenantId, k -> new ConcurrentHashMap<>())
         .computeIfAbsent(connectionName, connection -> {
             log.info(String.format("Creating new RMQ connection with name [%s] having [%d] threads", connection,
                 threadPoolSize));
             val rmqConnection = new RMQConnection(
                 connection,
-                multiClusterRmqConfig.get(clusterId),
+                multiClusterRmqConfig.get(tenantId),
                 executorServiceProvider.newFixedThreadPool(String.format("rmqconnection-%s", connection),
                     threadPoolSize),
                 environment, multiTenantedTtlConfig.getOrDefault(tenantId, TtlConfig.builder()
                 .build()), multiTenantedRootObserver.get(tenantId));
             Channel channel = rmqConnection.channel();
-          clusterAwareHealthCheck.addHealthCheckForCluster(clusterId,
+          clusterAwareHealthCheck.addHealthCheckForCluster(tenantId,
               new ConnectionHealthCheck(channel.getConnection(), channel));
             try {
               rmqConnection.start();
@@ -93,8 +89,8 @@ public class MultiTenantedConnectionRegistry implements Managed {
 
   private int determineThreadPoolSize(String tenantId, String connectionName) {
     Preconditions.checkArgument(
-        tenantToClusterMapping.containsKey(tenantId), UNKNOWN_TENANT + tenantId);
-    RMQConfig rmqConfig = multiClusterRmqConfig.get(tenantToClusterMapping.get(tenantId));
+        multiClusterRmqConfig.containsKey(tenantId), UNKNOWN_TENANT + tenantId);
+    RMQConfig rmqConfig = multiClusterRmqConfig.get(tenantId);
     return CommonUtils.determineThreadPoolSize(connectionName, rmqConfig);
   }
 
