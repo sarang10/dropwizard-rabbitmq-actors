@@ -3,13 +3,20 @@ package io.appform.dropwizard.actors;
 import static io.appform.dropwizard.actors.utils.CommonUtils.UNKNOWN_TENANT;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
+import com.google.inject.Injector;
+import io.appform.dropwizard.actors.actor.ActorRegistry;
+import io.appform.dropwizard.actors.actor.ActorConfig;
+import io.appform.dropwizard.actors.common.RMQBundleDataProvider;
 import io.appform.dropwizard.actors.config.RMQConfig;
+import io.appform.dropwizard.actors.exceptionhandler.ExceptionHandlingFactory;
 import io.appform.dropwizard.actors.healthcheck.ClusterAwareHealthCheck;
 import io.appform.dropwizard.actors.healthcheck.ConnectionHealthCheckListener;
 import io.appform.dropwizard.actors.metrics.RMQMetricObserver;
 import io.appform.dropwizard.actors.observers.RMQObserver;
 import io.appform.dropwizard.actors.observers.TerminalRMQObserver;
+import io.appform.dropwizard.actors.retry.RetryStrategyFactory;
 import io.dropwizard.Configuration;
 import io.dropwizard.ConfiguredBundle;
 import io.dropwizard.setup.Bootstrap;
@@ -20,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -30,9 +38,13 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
 
   @Getter
   private MultiTenantedConnectionRegistry connectionRegistry;
+  @Getter
+  private ActorRegistry actorRegistry;
   private final Map<String, List<RMQObserver>> multiTenantedObservers = new ConcurrentHashMap<>();
   private final Map<String, RMQObserver> multiTenantedRootObserver = new HashMap<>();
   private Map<String, RMQConfig> multiClusterRmqConfig;
+  // Will convert String inside second Map to Enum later
+  private Map<String, Map<String, ActorConfig>> multiTenantedActorConfig;
 
   protected MultiTenantedRabbitmqActorBundle() {}
 
@@ -41,7 +53,12 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
 
   protected abstract Map<String, TtlConfig> getMultiTenantedTtlConfig(T t);
   protected abstract Map<String, RMQConfig> getMultiTenantRmqConfig(T t);
-
+  protected abstract Map<String, Map<String, ActorConfig>> getMultiTenantActorConfig(T t);
+  protected abstract Supplier<ObjectMapper> getObjectMapper(T t);
+  protected abstract Supplier<RetryStrategyFactory> getRetryStrategyFactory(T t);
+  protected abstract Supplier<ExceptionHandlingFactory> getExceptionHandlingFactory(T t);
+  //Can take Guice Modules as well and then create own injector
+  protected abstract Supplier<Injector> getGuiceInjector(T t);
   protected ExecutorServiceProvider getExecutorServiceProvider(T t) {
     return (name, coreSize) -> Executors.newFixedThreadPool(coreSize);
   }
@@ -65,6 +82,10 @@ public abstract class MultiTenantedRabbitmqActorBundle<T extends Configuration> 
     this.connectionRegistry = new MultiTenantedConnectionRegistry(environment, executorServiceProvider,
         multiClusterRmqConfig, ttlConfig, multiTenantedRootObserver, clusterAwareHealthCheck);
     environment.lifecycle().manage(connectionRegistry);
+
+    RMQBundleDataProvider.init(getObjectMapper(t).get(), getRetryStrategyFactory(t).get(), getExceptionHandlingFactory(t).get(),
+        connectionRegistry);
+    ActorRegistry actorRegistry = new ActorRegistry(getGuiceInjector(t), getMultiTenantActorConfig(t));
 
     environment.healthChecks().addListener(new ConnectionHealthCheckListener(environment));
     environment.healthChecks().register("ClusterAwareRMQHealthCheck", clusterAwareHealthCheck);

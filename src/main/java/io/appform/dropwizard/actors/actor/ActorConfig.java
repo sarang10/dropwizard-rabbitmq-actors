@@ -54,6 +54,9 @@ public class ActorConfig {
     @NotEmpty
     private String exchange;
 
+    @NotEmpty
+    private String classPath;
+
     @Builder.Default
     private boolean delayed = false;
 
